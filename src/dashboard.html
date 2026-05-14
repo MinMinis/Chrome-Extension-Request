@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Request Lens Inspector</title>
+    <link rel="stylesheet" href="./dashboard.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <header class="sidebar-head">
+          <div class="brand">
+            <span class="brand-mark">RL</span>
+            <div>
+              <h1>Request Lens</h1>
+              <p id="captureState">Capture off</p>
+            </div>
+          </div>
+          <label class="toggle" title="Toggle capture">
+            <input id="enabledToggle" type="checkbox" />
+            <span class="toggle-track"><span class="toggle-thumb"></span></span>
+          </label>
+        </header>
+
+        <section class="metrics" aria-label="Metrics">
+          <div>
+            <strong id="totalCount">0</strong>
+            <span>Total</span>
+          </div>
+          <div>
+            <strong id="errorCount">0</strong>
+            <span>Errors</span>
+          </div>
+        </section>
+
+        <section class="filters" aria-label="Filters">
+          <input id="queryInput" type="search" placeholder="Search URL, body, status" />
+          <div class="filter-row">
+            <select id="methodFilter">
+              <option value="ALL">All methods</option>
+              <option>GET</option>
+              <option>POST</option>
+              <option>PUT</option>
+              <option>PATCH</option>
+              <option>DELETE</option>
+            </select>
+            <select id="statusFilter">
+              <option value="all">All status</option>
+              <option value="2xx">2xx</option>
+              <option value="3xx">3xx</option>
+              <option value="4xx">4xx</option>
+              <option value="5xx">5xx</option>
+              <option value="error">Errors</option>
+            </select>
+          </div>
+        </section>
+
+        <ol id="captureList" class="capture-list"></ol>
+      </aside>
+
+      <main class="workspace">
+        <header class="toolbar">
+          <div>
+            <p class="eyebrow">Inspector</p>
+            <h2 id="detailTitle">No capture selected</h2>
+          </div>
+          <div class="toolbar-actions">
+            <button id="copyCurl" type="button">Copy cURL</button>
+            <button id="exportJson" type="button">Export JSON</button>
+            <button id="clearCaptures" class="danger" type="button">Clear</button>
+          </div>
+        </header>
+
+        <section id="emptyState" class="empty-state">
+          <h3>No captures yet</h3>
+          <p>Turn capture on and refresh a page that uses fetch or XHR.</p>
+        </section>
+
+        <section id="detailPanel" class="detail-panel" hidden>
+          <div id="summaryStrip" class="summary-strip"></div>
+          <nav class="tabs" aria-label="Details">
+            <button class="tab active" data-tab="overview" type="button">Overview</button>
+            <button class="tab" data-tab="request" type="button">Request</button>
+            <button class="tab" data-tab="response" type="button">Response</button>
+            <button class="tab" data-tab="headers" type="button">Headers</button>
+          </nav>
+          <div id="detailContent" class="detail-content"></div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./dashboard.js"></script>
+  </body>
+</html>

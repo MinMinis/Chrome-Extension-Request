@@ -1,0 +1,11 @@
+{
+  "name": "request-lens-extension",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check:manifest": "node -e \"JSON.parse(require('fs').readFileSync('manifest.json','utf8')); console.log('manifest ok')\"",
+    "smoke": "py tools/smoke_check.py"
+  }
+}
