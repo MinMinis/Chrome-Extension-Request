@@ -33,7 +33,9 @@ refresh();
 async function refresh() {
   const state = await request("getState");
   enabledToggle.checked = state.enabled;
-  stateText.textContent = state.enabled ? "Capture on" : "Capture off";
+  stateText.textContent = state.enabled
+    ? captureModeText(state.captureSettings)
+    : "Capture off";
   totalCount.textContent = state.stats.total;
   okCount.textContent = state.stats.ok;
   errorCount.textContent = state.stats.errors;
@@ -103,5 +105,12 @@ function formatMethodMix(methods = {}) {
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([method, count]) => `${method} ${count}`)
-    .join(" · ");
+    .join(" / ");
+}
+
+function captureModeText(settings = {}) {
+  if (settings.includeRegex || settings.excludeRegex) {
+    return "Capture on / regex";
+  }
+  return "Capture on";
 }

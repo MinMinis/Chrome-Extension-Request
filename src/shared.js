@@ -1,5 +1,10 @@
 export const MAX_BODY_CHARS = 65_536;
 export const MAX_CAPTURES = 250;
+export const DEFAULT_CAPTURE_SETTINGS = {
+  includeRegex: "",
+  excludeRegex: "",
+  regexFlags: "i",
+};
 
 export function clampBody(value, maxChars = MAX_BODY_CHARS) {
   if (value === undefined || value === null) {
@@ -77,6 +82,45 @@ export function normalizeCapture(capture = {}) {
     responseBody: clampBody(capture.responseBody),
     mimeType: String(capture.mimeType || ""),
   };
+}
+
+export function normalizeCaptureSettings(settings = {}) {
+  settings = settings || {};
+  return {
+    includeRegex: String(settings.includeRegex || "").trim(),
+    excludeRegex: String(settings.excludeRegex || "").trim(),
+    regexFlags: normalizeRegexFlags(settings.regexFlags),
+  };
+}
+
+export function validateCaptureSettings(settings = {}) {
+  const normalized = normalizeCaptureSettings(settings);
+  compileUserRegex(normalized.includeRegex, normalized.regexFlags, "Include regex");
+  compileUserRegex(normalized.excludeRegex, normalized.regexFlags, "Exclude regex");
+  return normalized;
+}
+
+export function matchesCaptureSettings(capture, settings = {}) {
+  const normalized = normalizeCaptureSettings(settings);
+  const target = captureMatchTarget(capture);
+  let include = null;
+  let exclude = null;
+  try {
+    include = compileUserRegex(normalized.includeRegex, normalized.regexFlags);
+    exclude = compileUserRegex(normalized.excludeRegex, normalized.regexFlags);
+  } catch {
+    return true;
+  }
+
+  if (include && !include.test(target)) {
+    return false;
+  }
+
+  if (exclude && exclude.test(target)) {
+    return false;
+  }
+
+  return true;
 }
 
 export function filterCaptures(captures, filters = {}) {
@@ -185,6 +229,40 @@ function safeStringify(value) {
     return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
+  }
+}
+
+function captureMatchTarget(capture = {}) {
+  return [
+    capture.method,
+    capture.url,
+    capture.status,
+    capture.statusText,
+    capture.type,
+    capture.pageUrl,
+    capture.mimeType,
+  ]
+    .filter((part) => part !== undefined && part !== null)
+    .join(" ");
+}
+
+function normalizeRegexFlags(flags) {
+  const allowed = new Set(["i", "m", "s", "u", "y"]);
+  const raw = flags === undefined || flags === null ? "i" : String(flags);
+  return Array.from(new Set(raw.split("")))
+    .filter((flag) => allowed.has(flag))
+    .join("");
+}
+
+function compileUserRegex(pattern, flags, label = "Regex") {
+  if (!pattern) {
+    return null;
+  }
+
+  try {
+    return new RegExp(pattern, normalizeRegexFlags(flags));
+  } catch (error) {
+    throw new Error(`${label} is invalid: ${error.message}`);
   }
 }
 

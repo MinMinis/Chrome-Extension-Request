@@ -54,7 +54,7 @@ select {
 
 .sidebar {
   display: grid;
-  grid-template-rows: auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto 1fr;
   gap: 16px;
   min-height: 100vh;
   padding: 18px;
@@ -68,6 +68,7 @@ select {
 .summary-strip,
 .metrics div,
 .filters,
+.regex-capture,
 .capture-list li,
 .empty-state {
   border: 1px solid var(--line);
@@ -191,6 +192,41 @@ h1 {
   display: grid;
   gap: 10px;
   padding: 12px;
+}
+
+.regex-capture {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.section-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.section-label h2 {
+  font-size: 12px;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.section-label span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.section-label span.error {
+  color: var(--rose);
+  font-weight: 800;
+}
+
+.regex-row {
+  display: grid;
+  grid-template-columns: 86px 1fr;
+  gap: 10px;
 }
 
 input,

@@ -4,8 +4,11 @@ import assert from "node:assert/strict";
 import {
   buildCurlCommand,
   filterCaptures,
+  matchesCaptureSettings,
   normalizeCapture,
+  normalizeCaptureSettings,
   serializeForExport,
+  validateCaptureSettings,
 } from "../src/shared.js";
 
 test("normalizeCapture clamps long bodies and preserves request response shape", () => {
@@ -80,4 +83,32 @@ test("serializeForExport writes a stable JSON envelope", () => {
   assert.equal(parsed.count, 1);
   assert.equal(parsed.captures[0].id, "one");
   assert.ok(parsed.exportedAt);
+});
+
+test("matchesCaptureSettings supports include and exclude regex", () => {
+  const capture = normalizeCapture({
+    method: "POST",
+    url: "https://apis.uat.aia-apps.com/ijob/api/v1/masterdata/get-list-category",
+    pageUrl: "https://www.uat.aia-apps.com/ijob/",
+  });
+
+  assert.equal(
+    matchesCaptureSettings(capture, {
+      includeRegex: "masterdata|get-list-province",
+      excludeRegex: "analytics|\\.png$",
+      regexFlags: "i",
+    }),
+    true,
+  );
+  assert.equal(matchesCaptureSettings(capture, { includeRegex: "server\\.json" }), false);
+  assert.equal(matchesCaptureSettings(capture, { excludeRegex: "get-list-category" }), false);
+});
+
+test("validateCaptureSettings rejects invalid regex and normalizes flags", () => {
+  assert.deepEqual(normalizeCaptureSettings({ includeRegex: " api ", regexFlags: "igz" }), {
+    includeRegex: "api",
+    excludeRegex: "",
+    regexFlags: "i",
+  });
+  assert.throws(() => validateCaptureSettings({ includeRegex: "[" }), /Include regex is invalid/);
 });

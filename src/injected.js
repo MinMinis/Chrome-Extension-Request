@@ -13,10 +13,12 @@
   const originalSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
 
   let enabled = false;
+  let captureSettings = {};
 
   window.addEventListener("message", (event) => {
-    if (event.source === window && event.data?.source === CONTENT_SOURCE && event.data.type === "state") {
+    if (event.source === window && event.data?.source === CONTENT_SOURCE && event.data.type === "settings") {
       enabled = Boolean(event.data.enabled);
+      captureSettings = event.data.captureSettings || {};
     }
   });
 
@@ -30,6 +32,10 @@
     const startedAt = Date.now();
     const timerStart = performance.now();
     const request = inspectFetchRequest(input, init);
+    if (!matchesCaptureSettings(request, captureSettings)) {
+      return originalFetch.apply(this, arguments);
+    }
+    request.requestBody = getFetchRequestBody(input, init);
 
     try {
       const response = await originalFetch.apply(this, arguments);
@@ -68,7 +74,7 @@
   };
 
   XMLHttpRequest.prototype.send = function requestLensSend(body) {
-    if (!enabled || !this.__requestLens) {
+    if (!enabled || !this.__requestLens || !matchesCaptureSettings(this.__requestLens, captureSettings)) {
       return originalSend.apply(this, arguments);
     }
 
@@ -108,16 +114,24 @@
     const request = input instanceof Request ? input : null;
     const method = String(init.method || request?.method || "GET").toUpperCase();
     const headers = mergeHeaders(request?.headers, init.headers);
-    const requestBody =
-      init.body !== undefined ? serializeBody(init.body) : request ? readRequestBody(request) : Promise.resolve("");
 
     return {
       method,
       url: request ? request.url : absolutizeUrl(input),
       requestHeaders: headers,
-      requestBody,
+      requestBody: Promise.resolve(""),
       pageUrl: location.href,
     };
+  }
+
+  function getFetchRequestBody(input, init) {
+    if (init.body !== undefined) {
+      return serializeBody(init.body);
+    }
+    if (input instanceof Request) {
+      return readRequestBody(input);
+    }
+    return Promise.resolve("");
   }
 
   async function captureFetchResponse(response, request, startedAt, timerStart) {
@@ -164,6 +178,52 @@
       map.set(header.name.toLowerCase(), header);
     }
     return Array.from(map.values());
+  }
+
+  function matchesCaptureSettings(capture, settings = {}) {
+    const includeRegex = String(settings.includeRegex || "").trim();
+    const excludeRegex = String(settings.excludeRegex || "").trim();
+    const flags = normalizeRegexFlags(settings.regexFlags);
+    const target = [
+      capture.method,
+      capture.url,
+      capture.status,
+      capture.statusText,
+      capture.type,
+      capture.pageUrl,
+      capture.mimeType,
+    ]
+      .filter((part) => part !== undefined && part !== null)
+      .join(" ");
+    const include = compileRegex(includeRegex, flags);
+    const exclude = compileRegex(excludeRegex, flags);
+
+    if (include && !include.test(target)) {
+      return false;
+    }
+    if (exclude && exclude.test(target)) {
+      return false;
+    }
+    return true;
+  }
+
+  function compileRegex(pattern, flags) {
+    if (!pattern) {
+      return null;
+    }
+    try {
+      return new RegExp(pattern, flags);
+    } catch {
+      return null;
+    }
+  }
+
+  function normalizeRegexFlags(flags) {
+    const allowed = new Set(["i", "m", "s", "u", "y"]);
+    const raw = flags === undefined || flags === null ? "i" : String(flags);
+    return Array.from(new Set(raw.split("")))
+      .filter((flag) => allowed.has(flag))
+      .join("");
   }
 
   function headersToArray(headers) {

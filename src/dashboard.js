@@ -11,6 +11,11 @@ const state = {
     method: "ALL",
     statusGroup: "all",
   },
+  captureSettings: {
+    includeRegex: "",
+    excludeRegex: "",
+    regexFlags: "i",
+  },
 };
 
 const nodes = {
@@ -21,6 +26,11 @@ const nodes = {
   queryInput: document.querySelector("#queryInput"),
   methodFilter: document.querySelector("#methodFilter"),
   statusFilter: document.querySelector("#statusFilter"),
+  includeRegex: document.querySelector("#includeRegex"),
+  excludeRegex: document.querySelector("#excludeRegex"),
+  regexFlags: document.querySelector("#regexFlags"),
+  regexStatus: document.querySelector("#regexStatus"),
+  saveRegexSettings: document.querySelector("#saveRegexSettings"),
   captureList: document.querySelector("#captureList"),
   detailTitle: document.querySelector("#detailTitle"),
   emptyState: document.querySelector("#emptyState"),
@@ -52,6 +62,18 @@ nodes.statusFilter.addEventListener("change", () => {
   state.filters.statusGroup = nodes.statusFilter.value;
   applyFilters();
 });
+
+nodes.saveRegexSettings.addEventListener("click", async () => {
+  await saveCaptureSettings();
+});
+
+for (const input of [nodes.includeRegex, nodes.excludeRegex, nodes.regexFlags]) {
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      saveCaptureSettings();
+    }
+  });
+}
 
 nodes.clearCaptures.addEventListener("click", async () => {
   await request("clearCaptures");
@@ -97,6 +119,7 @@ loadCaptures();
 async function loadCaptures() {
   const response = await request("getCaptures");
   state.enabled = response.enabled;
+  state.captureSettings = response.captureSettings || state.captureSettings;
   state.captures = response.captures || [];
   if (!state.selectedId && state.captures[0]) {
     state.selectedId = state.captures[0].id;
@@ -115,6 +138,7 @@ function applyFilters() {
 function render() {
   nodes.enabledToggle.checked = state.enabled;
   nodes.captureState.textContent = state.enabled ? "Capture on" : "Capture off";
+  renderCaptureSettings();
   nodes.totalCount.textContent = state.captures.length;
   nodes.errorCount.textContent = state.captures.filter(
     (capture) => capture.error || capture.status >= 400,
@@ -122,6 +146,38 @@ function render() {
   nodes.copyCurl.disabled = !selectedCapture();
   renderList();
   renderDetails();
+}
+
+async function saveCaptureSettings() {
+  const settings = {
+    includeRegex: nodes.includeRegex.value,
+    excludeRegex: nodes.excludeRegex.value,
+    regexFlags: nodes.regexFlags.value,
+  };
+
+  try {
+    const response = await request("setCaptureSettings", { settings });
+    state.captureSettings = response.captureSettings || settings;
+    renderCaptureSettings("Saved");
+  } catch (error) {
+    renderCaptureSettings(error.message || "Invalid regex", true);
+  }
+}
+
+function renderCaptureSettings(message, isError = false) {
+  const settings = state.captureSettings || {};
+  if (document.activeElement !== nodes.includeRegex) {
+    nodes.includeRegex.value = settings.includeRegex || "";
+  }
+  if (document.activeElement !== nodes.excludeRegex) {
+    nodes.excludeRegex.value = settings.excludeRegex || "";
+  }
+  if (document.activeElement !== nodes.regexFlags) {
+    nodes.regexFlags.value = settings.regexFlags || "i";
+  }
+
+  nodes.regexStatus.textContent = message || regexSummary(settings);
+  nodes.regexStatus.classList.toggle("error", Boolean(isError));
 }
 
 function renderList() {
@@ -347,6 +403,21 @@ function bodySize(value) {
 
 function isBad(capture) {
   return Boolean(capture.error) || capture.status >= 400;
+}
+
+function regexSummary(settings = {}) {
+  const hasInclude = Boolean(settings.includeRegex);
+  const hasExclude = Boolean(settings.excludeRegex);
+  if (hasInclude && hasExclude) {
+    return "Include / exclude";
+  }
+  if (hasInclude) {
+    return "Include only";
+  }
+  if (hasExclude) {
+    return "Exclude active";
+  }
+  return "All requests";
 }
 
 function flashButton(button, label) {

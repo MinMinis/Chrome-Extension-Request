@@ -56,6 +56,19 @@
           </div>
         </section>
 
+        <section class="regex-capture" aria-label="Regex capture">
+          <div class="section-label">
+            <h2>Capture Regex</h2>
+            <span id="regexStatus">All requests</span>
+          </div>
+          <input id="includeRegex" type="text" spellcheck="false" placeholder="Include regex, e.g. api|masterdata" />
+          <input id="excludeRegex" type="text" spellcheck="false" placeholder="Exclude regex, e.g. analytics|\\.png$" />
+          <div class="regex-row">
+            <input id="regexFlags" type="text" spellcheck="false" maxlength="8" aria-label="Regex flags" placeholder="i" />
+            <button id="saveRegexSettings" type="button">Save</button>
+          </div>
+        </section>
+
         <ol id="captureList" class="capture-list"></ol>
       </aside>
 

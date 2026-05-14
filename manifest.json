@@ -6,6 +6,7 @@
   "permissions": [
     "storage",
     "tabs",
+    "scripting",
     "webRequest",
     "unlimitedStorage"
   ],
@@ -22,17 +23,6 @@
   },
   "options_page": "src/dashboard.html",
   "content_scripts": [
-    {
-      "matches": [
-        "<all_urls>"
-      ],
-      "js": [
-        "src/injected.js"
-      ],
-      "run_at": "document_start",
-      "all_frames": true,
-      "world": "MAIN"
-    },
     {
       "matches": [
         "<all_urls>"

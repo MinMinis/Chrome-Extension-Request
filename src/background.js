@@ -1,29 +1,53 @@
-import { MAX_CAPTURES, normalizeCapture, summarizeStats } from "./shared.js";
+import {
+  DEFAULT_CAPTURE_SETTINGS,
+  MAX_CAPTURES,
+  matchesCaptureSettings,
+  normalizeCapture,
+  normalizeCaptureSettings,
+  summarizeStats,
+  validateCaptureSettings,
+} from "./shared.js";
 
 const STORAGE_KEYS = {
   enabled: "requestLens.enabled",
   captures: "requestLens.captures",
+  settings: "requestLens.captureSettings",
 };
 
 const headerTimeline = new Map();
 let enabled = false;
+let captureSettings = DEFAULT_CAPTURE_SETTINGS;
 
 bootstrap();
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const existing = await chrome.storage.local.get([STORAGE_KEYS.enabled, STORAGE_KEYS.captures]);
+  const existing = await chrome.storage.local.get([
+    STORAGE_KEYS.enabled,
+    STORAGE_KEYS.captures,
+    STORAGE_KEYS.settings,
+  ]);
   if (existing[STORAGE_KEYS.enabled] === undefined) {
     await chrome.storage.local.set({ [STORAGE_KEYS.enabled]: false });
   }
   if (!Array.isArray(existing[STORAGE_KEYS.captures])) {
     await chrome.storage.local.set({ [STORAGE_KEYS.captures]: [] });
   }
+  if (!existing[STORAGE_KEYS.settings]) {
+    await chrome.storage.local.set({ [STORAGE_KEYS.settings]: DEFAULT_CAPTURE_SETTINGS });
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local" && changes[STORAGE_KEYS.enabled]) {
     enabled = Boolean(changes[STORAGE_KEYS.enabled].newValue);
-    broadcast({ type: "stateChanged", enabled });
+    if (enabled) {
+      injectIntoOpenTabs();
+    }
+    broadcast({ type: "stateChanged", enabled, captureSettings });
+  }
+  if (areaName === "local" && changes[STORAGE_KEYS.settings]) {
+    captureSettings = normalizeCaptureSettings(changes[STORAGE_KEYS.settings].newValue);
+    broadcast({ type: "stateChanged", enabled, captureSettings });
   }
 });
 
@@ -37,8 +61,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 registerWebRequestObservers();
 
 async function bootstrap() {
-  const data = await chrome.storage.local.get(STORAGE_KEYS.enabled);
+  const data = await chrome.storage.local.get([STORAGE_KEYS.enabled, STORAGE_KEYS.settings]);
   enabled = Boolean(data[STORAGE_KEYS.enabled]);
+  captureSettings = normalizeCaptureSettings(data[STORAGE_KEYS.settings]);
+  if (enabled) {
+    injectIntoOpenTabs();
+  }
 }
 
 async function handleMessage(message, sender) {
@@ -48,6 +76,13 @@ async function handleMessage(message, sender) {
     case "setEnabled":
       enabled = Boolean(message.enabled);
       await chrome.storage.local.set({ [STORAGE_KEYS.enabled]: enabled });
+      if (enabled) {
+        await injectIntoOpenTabs();
+      }
+      return getState();
+    case "setCaptureSettings":
+      captureSettings = validateCaptureSettings(message.settings);
+      await chrome.storage.local.set({ [STORAGE_KEYS.settings]: captureSettings });
       return getState();
     case "clearCaptures":
       await chrome.storage.local.set({ [STORAGE_KEYS.captures]: [] });
@@ -57,6 +92,9 @@ async function handleMessage(message, sender) {
       return getState({ includeCaptures: true });
     case "captureFromPage":
       return saveCaptureFromPage(message.capture, sender);
+    case "injectMainWorld":
+      await injectMainWorld(sender);
+      return {};
     case "openDashboard":
       await chrome.tabs.create({ url: chrome.runtime.getURL("src/dashboard.html") });
       return {};
@@ -66,10 +104,16 @@ async function handleMessage(message, sender) {
 }
 
 async function getState(options = {}) {
-  const data = await chrome.storage.local.get([STORAGE_KEYS.enabled, STORAGE_KEYS.captures]);
+  const data = await chrome.storage.local.get([
+    STORAGE_KEYS.enabled,
+    STORAGE_KEYS.captures,
+    STORAGE_KEYS.settings,
+  ]);
   const captures = Array.isArray(data[STORAGE_KEYS.captures]) ? data[STORAGE_KEYS.captures] : [];
+  const settings = normalizeCaptureSettings(data[STORAGE_KEYS.settings] || captureSettings);
   const state = {
     enabled: Boolean(data[STORAGE_KEYS.enabled]),
+    captureSettings: settings,
     count: captures.length,
     stats: summarizeStats(captures),
     recent: captures.slice(0, 8),
@@ -104,6 +148,10 @@ async function saveCaptureFromPage(rawCapture, sender) {
     requestId: snapshot?.requestId || rawCapture.requestId,
     initiator: snapshot?.initiator || rawCapture.initiator,
   });
+
+  if (!matchesCaptureSettings(capture, captureSettings)) {
+    return { ignored: true, reason: "regex" };
+  }
 
   const data = await chrome.storage.local.get(STORAGE_KEYS.captures);
   const captures = Array.isArray(data[STORAGE_KEYS.captures]) ? data[STORAGE_KEYS.captures] : [];
@@ -216,6 +264,43 @@ function pruneHeaderTimeline() {
       headerTimeline.delete(requestId);
     }
   }
+}
+
+async function injectIntoOpenTabs() {
+  const tabs = await chrome.tabs.query({});
+  await Promise.allSettled(
+    tabs
+      .filter((tab) => tab.id && isInjectableUrl(tab.url))
+      .map((tab) =>
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id, allFrames: true },
+          files: ["src/content-script.js"],
+        }),
+      ),
+  );
+}
+
+async function injectMainWorld(sender) {
+  if (!sender.tab?.id || !isInjectableUrl(sender.tab.url)) {
+    return;
+  }
+
+  const target = { tabId: sender.tab.id };
+  if (Number.isInteger(sender.frameId) && sender.frameId >= 0) {
+    target.frameIds = [sender.frameId];
+  } else {
+    target.allFrames = true;
+  }
+
+  await chrome.scripting.executeScript({
+    target,
+    files: ["src/injected.js"],
+    world: "MAIN",
+  });
+}
+
+function isInjectableUrl(url = "") {
+  return /^(https?|file):/i.test(url);
 }
 
 function broadcast(message) {
